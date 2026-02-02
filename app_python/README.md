@@ -128,3 +128,53 @@ app_python/
     ├── LAB01.md         # Lab report
     └── screenshots/     # Evidence
 ```
+
+### Docker Container 
+
+**Build the image locally:**
+```bash
+docker build -t [your-image-name] .
+docker build -t devops-service:latest .
+docker build -t my-org/devops-service:v1.0 .
+```
+
+**Run a container:**
+```bash
+# Basic run with port mapping
+docker run -p [host-port]:5000 [image-name]
+
+# Examples:
+docker run -p 5000:5000 devops-service
+docker run -p 8080:5000 devops-service:latest
+docker run -d -p 5000:5000 --name my-service devops-service
+```
+
+**With environment variables:**
+```bash
+docker run -p 5000:5000 -e PORT=5000 -e DEBUG=true [image-name]
+```
+
+**Pull from Docker Hub:**
+```bash
+# Pull the public image
+docker pull poparthur/devops-info-service:latest 
+
+# Run the pulled image
+docker run -p [host-port]:5000  poparthur/devops-info-service:latest 
+
+# Pull specific version
+docker pull  poparthur/devops-info-service:latest :[tag]
+```
+
+## Docker Hub Repository
+
+The application is available on Docker Hub:
+- **Image:** ` poparthur/devops-info-service:latest`
+- **Tags:** `latest`
+- **URL:** https://hub.docker.com/r/poparthur/devops-info-service
+
+Pull and run with:
+```bash
+docker pull arthurdevops/devops-service:latest
+docker run -p 5000:5000 arthurdevops/devops-service:latest
+```
