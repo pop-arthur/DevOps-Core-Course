@@ -1,0 +1,98 @@
+name: Python CI + Docker (SemVer)
+
+on:
+  push:
+    branches:
+      - '**'
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devops-info-service
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          if [ -f "app_python/requirements.txt" ]; then
+            pip install -r app_python/requirements.txt
+          fi
+
+      - name: Run linter (ruff)
+        run: |
+          pip install ruff
+          ruff check app_python/
+
+      - name: Run unit tests
+        run: |
+          cd app_python
+          pytest -v
+
+  docker-build:
+    name: Build & Push Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: extract_version
+        run: |
+          # v1.2.3 -> 1.2.3
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
+          echo "major_minor=$MAJOR_MINOR" >> $GITHUB_OUTPUT
+          
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          cd app_python
+          docker build -t $IMAGE_NAME:${{ steps.extract_version.outputs.version }} .
+
+      - name: Tag Docker image
+        run: |
+          # Создаем дополнительные теги
+          docker tag $IMAGE_NAME:${{ steps.extract_version.outputs.version }} \
+                     $IMAGE_NAME:${{ steps.extract_version.outputs.major_minor }}
+          
+          docker tag $IMAGE_NAME:${{ steps.extract_version.outputs.version }} \
+                     $IMAGE_NAME:${{ steps.extract_version.outputs.major }}
+          
+          docker tag $IMAGE_NAME:${{ steps.extract_version.outputs.version }} \
+                     $IMAGE_NAME:latest
+
+      - name: Push Docker images
+        run: |
+          docker push $IMAGE_NAME:${{ steps.extract_version.outputs.version }}
+          docker push $IMAGE_NAME:${{ steps.extract_version.outputs.major_minor }}
+          docker push $IMAGE_NAME:${{ steps.extract_version.outputs.major }}
+          docker push $IMAGE_NAME:latest

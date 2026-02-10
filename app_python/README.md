@@ -178,3 +178,18 @@ Pull and run with:
 docker pull arthurdevops/devops-service:latest
 docker run -p 5000:5000 arthurdevops/devops-service:latest
 ```
+
+## How to Run Tests
+
+Ensure you have installed `pytest` and `httpx` libs and run:
+
+```bash
+# Run all tests
+pytest
+
+# Run specific file
+pytest tests/test_endpoints.py 
+
+# Run specific test
+pytest tests/test_endpoints.py::test_various_nonexistent_paths
+```
