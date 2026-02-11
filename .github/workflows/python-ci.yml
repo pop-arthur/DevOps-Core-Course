@@ -5,8 +5,14 @@ on:
     branches:
       - '**'
     tags: [ 'v*.*.*' ]
+    paths:
+      - "app_python/**"
+      - '.github/workflows/python-ci.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - "app_python/**"
+      - '.github/workflows/python-ci.yml'
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devops-info-service
@@ -43,6 +49,23 @@ jobs:
         run: |
           cd app_python
           pytest -v
+
+      - name: Run tests with coverage
+        run: |
+          cd app_python
+          coverage run -m pytest
+          coverage report --fail-under=70
+          coverage xml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          format: cobertura
+          file: app_python/coverage.xml
+          flag-name: python
+          parallel: true
+
 
   docker-build:
     name: Build & Push Docker Image
