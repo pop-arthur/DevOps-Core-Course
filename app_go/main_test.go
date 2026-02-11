@@ -10,14 +10,7 @@ import (
 	"fmt"
 	"time"
 	"errors"
-	"os"
 )
-
-var httpListenAndServe = http.ListenAndServe
-
-// Заменяемые переменные для тестирования
-var osHostname = os.Hostname
-var logPrintf = log.Printf
 
 func TestMainHandler_StatusOK(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)

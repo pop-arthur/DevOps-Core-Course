@@ -127,31 +127,3 @@ v1.2.3 (git tag) →
 
 **🔗 Link:** https://github.com/YOUR_REPO/actions/runs/1234567890
 
-**Terminal Output:**
-```
-✅ Lint & Test passed (3m 42s)
-  └─ ruff: 0 errors, 0 warnings
-  └─ pytest: 12 passed, coverage 78%
-  └─ snyk: 0 vulnerabilities
-
-✅ Build & Push Docker Image (1m 28s)
-  └─ Tags: glebpp/devops-info-service:1.0.0
-  └─ Tags: glebpp/devops-info-service:1.0
-  └─ Tags: glebpp/devops-info-service:1
-  └─ Tags: glebpp/devops-info-service:latest
-  └─ Digest: sha256:a1b2c3d4e5f6...
-```
-
-**✅ Final Status:** All jobs completed successfully ✓
-
----
-
-### **Summary**
-
-| Component | Implementation | Status |
-|----------|---------------|--------|
-| **Trigger Strategy** | Path-filtered, tag-based releases | ✅ |
-| **Testing** | Ruff linting + Pytest + Coverage | ✅ |
-| **Security** | Snyk dependency scanning | ✅ |
-| **Docker Tags** | SemVer (x.y.z, x.y, x, latest) | ✅ |
-| **Push** | On version tags only | ✅ |
