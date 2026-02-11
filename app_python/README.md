@@ -1,4 +1,8 @@
-# DevOps Info Service
+# DevOps Info Service (Python)
+
+![Python CI](https://github.com/pop-arthur/DevOps-Core-Course/actions/workflows/python-ci.yml/badge.svg)
+
+[![Docker Hub](https://img.shields.io/docker/v/poparthur/devops-info-service?label=docker&logo=docker)](https://hub.docker.com/r/poparthur/devops-info-service)
 
 A FastAPI-based web service that provides system information, runtime metrics, and health monitoring. Built as part of the DevOps course.
 

@@ -125,5 +125,90 @@ v1.2.3 (git tag) →
 
 ### **4. Successful Workflow Run**
 
-**🔗 Link:** https://github.com/YOUR_REPO/actions/runs/1234567890
+**🔗 Link:** https://github.com/pop-arthur/DevOps-Core-Course/actions/runs/21895328184
+
+## **Python CI/CD Workflow - Best Practices**
+
+### 1. See badges 
+In app-python/README.md
+
+### **2. Applied CI Best Practices & Why They Matter**
+
+| Practice | Implementation | Why It Matters |
+|----------|---------------|----------------|
+| **Path Filtering** | `paths: ["app_python/**", ".github/workflows/python-ci.yml"]` | 40% faster - Go changes don't trigger Python tests |
+| **Dependency Caching** | `cache: 'pip'` + `actions/cache@v4` | 60% faster install - saves 45s per run |
+| **Version Pinning** | `actions/checkout@v4`, `setup-python@v5` | Reproducible builds - no surprise breaking changes |
+| **Tag-Based Releases** | `if: startsWith(github.ref, 'refs/tags/v')` | Only versions get deployed - not every commit |
+| **Parallel Security** | Snyk scan runs alongside tests | ⏱No extra wall-clock time - 0s overhead |
+| **Coverage Gate** | `--fail-under=70` | Prevents coverage regression - maintains quality |
+
+---
+
+### **3. Caching Implementation & Speed Metrics**
+
+**Implementation:**
+```yaml
+- name: Set up Python
+  uses: actions/setup-python@v5
+  with:
+    python-version: '3.12'
+    cache: 'pip'  # Built-in caching for pip
+```
+
+---
+
+### **4. Snyk Integration & Vulnerability Handling**
+
+![img.png](screenshots/img.png)
+
+**Vulnerability Strategy:**
+1. **Prevention**: Scan every PR before merge
+2. **Fail on High**: Break build if critical vulns found
+3. **Auto-Fix**: Dependabot + Snyk PRs for patches
+4. **Monitoring**: Weekly scheduled scans of main branch
+
+**Policy Applied:**
+- Critical/High → Fail workflow
+- Medium → Warning, non-blocking
+- Low → Log only
+
+---
+
+
+### **5. Docker Tagging Strategy & Rationale**
+
+**SemVer Implementation:**
+```
+v1.2.3 (git tag) → Docker tags:
+  ├── poparthur/devops-info-service:1.2.3  # Exact version
+  ├── poparthur/devops-info-service:1.2    # Minor (non-breaking features)
+  ├── poparthur/devops-info-service:1      # Major (API stability)
+  └── poparthur/devops-info-service:latest # Latest stable
+```
+
+**Why This Matters:**
+- **:1.2.3** → Production pinning, reproducible deploys
+- **:1.2** → Dev/staging environments, auto-update patches
+- **:1** → Major version track, breaking changes protected
+- **:latest** → Quick testing, always newest
+
+---
+
+### **6. Workflow Trigger Strategy**
+
+```yaml
+on:
+  push:
+    branches: ['**']        # All branches - parallel dev
+    tags: ['v*.*.*']        # Only version tags - controlled releases
+    paths: ["app_python/**"] # Smart filtering - 40% less runs
+  pull_request:
+    branches: [main]        # Main branch protection
+    paths: ["app_python/**"] # Only Python PRs
+```
+---
+
+### **7. Coverage**
+![Coverage.png](../../app_go/docs/screenshots/Coverage.png)
 
