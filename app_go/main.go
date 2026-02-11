@@ -95,6 +95,16 @@ func getUptime() (int, string) {
 
 // Main endpoint
 func mainHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodGet {
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error":   "Method Not Allowed",
+            "message": "Only GET method is allowed for this endpoint",
+        })
+        return
+    }
+
 	log.Printf("Request: %s %s from %s", r.Method, r.URL.Path, getClientIP(r))
 
 	// Root path
@@ -152,6 +162,16 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 
 // Health endpoint 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "Method Not Allowed",
+			"message": "Only GET method is allowed for this endpoint",
+		})
+		return
+	}
+
 	log.Printf("Health check from %s", getClientIP(r))
 
 	uptimeSeconds, _ := getUptime()
@@ -187,33 +207,38 @@ func notFoundHandler(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(response)
 }
-
 func main() {
-	// Setup env
-	host := os.Getenv("HOST")
-	if host == "" {
-		host = "0.0.0.0"
-	}
+    if err := run(); err != nil {
+        log.Fatalf("Server failed to start: %v", err)
+    }
+}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8000"
-	}
 
-	// Setup logging
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Printf("Starting DevOps Info Service (Go) on %s:%s", host, port)
+// Вынесите логику в отдельную экспортируемую функцию
+func run() error {
+    // Setup env
+    host := os.Getenv("HOST")
+    if host == "" {
+        host = "0.0.0.0"
+    }
 
-	// Setup routes
-	http.HandleFunc("/", mainHandler)
-	http.HandleFunc("/health", healthHandler)
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8000"
+    }
 
-	// Start server
-	addr := fmt.Sprintf("%s:%s", host, port)
-	log.Printf("Server is running on http://%s", addr)
-	log.Printf("Press Ctrl+C to stop")
+    // Setup logging
+    log.SetFlags(log.LstdFlags | log.Lshortfile)
+    log.Printf("Starting DevOps Info Service (Go) on %s:%s", host, port)
 
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
-	}
+    // Setup routes
+    http.HandleFunc("/", mainHandler)
+    http.HandleFunc("/health", healthHandler)
+
+    // Start server
+    addr := fmt.Sprintf("%s:%s", host, port)
+    log.Printf("Server is running on http://%s", addr)
+    log.Printf("Press Ctrl+C to stop")
+
+    return http.ListenAndServe(addr, nil)
 }

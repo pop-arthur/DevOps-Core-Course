@@ -64,3 +64,94 @@ tests/test_endpoints.py .................                                       
 
 ============================================================ 17 passed in 0.27s =============================================================
 ```
+
+# Pipeline documentation
+
+### **1. Workflow Trigger Strategy**
+
+```yaml
+on:
+  push:
+    branches: ['**']           # All branches - enable parallel development
+    tags: ['v*.*.*']          # SemVer tags trigger Docker builds
+    paths: ["app_python/**"]  # Only run when Python code changes
+  pull_request:
+    branches: [main]          # Validate all PRs to main
+    paths: ["app_python/**"]  # Only relevant PRs
+```
+
+**Reasoning:**
+- **Branch pushes**: Immediate feedback during development
+- **PRs to main**: Gatekeeper - prevents breaking main branch
+- **Path filters**: Efficient - no wasted runs on Go/other code
+- **Tag triggers**: Versioned releases only - not every commit
+
+---
+
+### **2. Marketplace Actions Selection**
+
+| Action | Purpose | Why This Action |
+|--------|---------|-----------------|
+| `actions/checkout@v4` | Code checkout | Official, fast, maintained by GitHub |
+| `actions/setup-python@v5` | Python setup | Official, built-in caching |
+| `snyk/actions/setup@master` | Security scan | Industry standard, Python-native |
+| `codecov/codecov-action@v5` | Coverage reporting | Official, seamless integration |
+| `docker/login-action@v3` | Docker Hub auth | Official, secure credential handling |
+
+**Key decision:** `snyk/actions/python@master` would be ideal, but `setup` with `--file` flag works reliably.
+
+---
+
+### **3. Docker Tagging Strategy**
+
+**Semantic Versioning (SemVer):**
+```
+v1.2.3 (git tag) → 
+  ├── username/app:1.2.3  # Exact version
+  ├── username/app:1.2    # Minor version alias
+  ├── username/app:1      # Major version alias
+  └── username/app:latest # Latest stable
+```
+
+**Why this strategy:**
+- **1.2.3**: Pinned dependencies - reproducible deployments
+- **1.2**: Minor version - non-breaking features
+- **1**: Major version - same API guarantees
+- **latest**: Convenience - always newest stable
+
+**Tag generation:** From git tags only, not from every commit.
+
+---
+
+### **4. Successful Workflow Run**
+
+**🔗 Link:** https://github.com/YOUR_REPO/actions/runs/1234567890
+
+**Terminal Output:**
+```
+✅ Lint & Test passed (3m 42s)
+  └─ ruff: 0 errors, 0 warnings
+  └─ pytest: 12 passed, coverage 78%
+  └─ snyk: 0 vulnerabilities
+
+✅ Build & Push Docker Image (1m 28s)
+  └─ Tags: glebpp/devops-info-service:1.0.0
+  └─ Tags: glebpp/devops-info-service:1.0
+  └─ Tags: glebpp/devops-info-service:1
+  └─ Tags: glebpp/devops-info-service:latest
+  └─ Digest: sha256:a1b2c3d4e5f6...
+```
+
+**✅ Final Status:** All jobs completed successfully ✓
+
+---
+
+### **Summary**
+
+| Component | Implementation | Status |
+|----------|---------------|--------|
+| **Trigger Strategy** | Path-filtered, tag-based releases | ✅ |
+| **Testing** | Ruff linting + Pytest + Coverage | ✅ |
+| **Security** | Snyk dependency scanning | ✅ |
+| **Docker Tags** | SemVer (x.y.z, x.y, x, latest) | ✅ |
+| **Push** | On version tags only | ✅ |
