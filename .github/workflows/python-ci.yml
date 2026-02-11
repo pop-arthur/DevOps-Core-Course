@@ -57,6 +57,15 @@ jobs:
           coverage report --fail-under=70
           coverage xml
 
+      - name: Run Snyk scan for main dependencies
+        uses: snyk/actions/setup@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --file=app_python/requirements.txt
+
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
