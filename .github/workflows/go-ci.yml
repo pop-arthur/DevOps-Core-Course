@@ -69,10 +69,6 @@ jobs:
           flag-name: go
           parallel: true
 
-      - name: Finalize Coveralls
-        uses: coverallsapp/github-action@v2
-        with:
-          parallel-finished: true
 
   security:
     runs-on: ubuntu-latest
