@@ -1,4 +1,8 @@
-# DevOps Info Service
+# DevOps Info Service (Python)
+
+![Python CI](https://github.com/pop-arthur/DevOps-Core-Course/actions/workflows/python-ci.yml/badge.svg)
+
+[![Docker Hub](https://img.shields.io/docker/v/poparthur/devops-info-service?label=docker&logo=docker)](https://hub.docker.com/r/poparthur/devops-info-service)
 
 A FastAPI-based web service that provides system information, runtime metrics, and health monitoring. Built as part of the DevOps course.
 
@@ -177,4 +181,19 @@ Pull and run with:
 ```bash
 docker pull arthurdevops/devops-service:latest
 docker run -p 5000:5000 arthurdevops/devops-service:latest
+```
+
+## How to Run Tests
+
+Ensure you have installed `pytest` and `httpx` libs and run:
+
+```bash
+# Run all tests
+pytest
+
+# Run specific file
+pytest tests/test_endpoints.py 
+
+# Run specific test
+pytest tests/test_endpoints.py::test_various_nonexistent_paths
 ```

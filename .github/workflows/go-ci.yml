@@ -1,0 +1,135 @@
+name: Go CI + Docker (SemVer)
+
+on:
+  push:
+    branches:
+      - '**'
+    tags: [ 'v*.*.*' ]
+    paths:
+      - "app_go/**"
+      - '.github/workflows/go-ci.yml'
+  pull_request:
+    paths:
+      - "app_go/**"
+      - '.github/workflows/go-ci.yml'
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devops-info-service-go
+  GO_VERSION: "1.22"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Нужно для получения всех тегов
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('app_go/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run Go tests with coverage
+        run: |
+          cd app_go
+          go test ./... -coverprofile=coverage.out
+          go tool cover -func=coverage.out | tee coverage.txt
+          TOTAL=$(go tool cover -func=coverage.out | grep total: | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Total coverage: $TOTAL%"
+          if (( $(echo "$TOTAL < 70" | bc -l) )); then
+            echo "Coverage below 70%"
+            exit 1
+          fi
+
+      - name: Convert Go coverage to Cobertura
+        run: |
+          go install github.com/boumenot/gocover-cobertura@latest
+          cd app_go
+          gocover-cobertura < coverage.out > coverage.xml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          format: cobertura
+          file: app_go/coverage.xml
+          flag-name: go
+          parallel: true
+
+
+  security:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/setup@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --file=app_go/go.mod
+
+  docker-build:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref_type == 'tag' || startsWith(github.ref, 'refs/tags/v'))
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
+          # Извлекаем major.minor
+          MINOR=$(echo $VERSION | cut -d. -f1,2)
+          echo "MINOR=$MINOR" >> $GITHUB_ENV
+          
+          # Извлекаем major
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          echo "MAJOR=$MAJOR" >> $GITHUB_ENV
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app_go
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+            ${{ env.IMAGE_NAME }}:${{ env.MINOR }}
+            ${{ env.IMAGE_NAME }}:${{ env.MAJOR }}
+            ${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            COMMIT_SHA=${{ github.sha }}

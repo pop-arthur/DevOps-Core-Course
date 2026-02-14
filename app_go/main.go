@@ -10,7 +10,18 @@ import (
 	"time"
 )
 
-// Structures definition
+// ==================== ЗАМЕНЯЕМЫЕ ПЕРЕМЕННЫЕ ДЛЯ ТЕСТИРОВАНИЯ ====================
+var (
+	osHostname         = os.Hostname
+	logPrintf          = log.Printf
+	logFatalf          = log.Fatalf
+	httpListenAndServe = http.ListenAndServe
+	osGetenv           = os.Getenv
+	timeNow            = time.Now
+	timeSince          = time.Since
+)
+
+// ==================== СТРУКТУРЫ ДАННЫХ ====================
 type Service struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
@@ -61,18 +72,17 @@ type ServiceInfo struct {
 	Endpoints []Endpoint `json:"endpoints"`
 }
 
-// Helper functions
+// ==================== HELPER FUNCTIONS ====================
 func getHostname() string {
-	hostname, err := os.Hostname()
+	hostname, err := osHostname()
 	if err != nil {
-		log.Printf("Error getting hostname: %v", err)
+		logPrintf("Error getting hostname: %v", err)
 		return "unknown"
 	}
 	return hostname
 }
 
 func getClientIP(r *http.Request) string {
-	// Try X-Forwarded-For header first (for proxy/load balancer)
 	forwarded := r.Header.Get("X-Forwarded-For")
 	if forwarded != "" {
 		return forwarded
@@ -81,30 +91,37 @@ func getClientIP(r *http.Request) string {
 }
 
 // Application start time
-var startTime = time.Now()
+var startTime = timeNow()
 
-// Calculate uptime information
 func getUptime() (int, string) {
-	elapsed := time.Since(startTime)
+	elapsed := timeSince(startTime)
 	seconds := int(elapsed.Seconds())
 	hours := seconds / 3600
 	minutes := (seconds % 3600) / 60
 	return seconds, fmt.Sprintf("%d hours, %d minutes", hours, minutes)
 }
 
-
-// Main endpoint
+// ==================== HANDLERS ====================
 func mainHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Request: %s %s from %s", r.Method, r.URL.Path, getClientIP(r))
+	if r.Method != http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "Method Not Allowed",
+			"message": "Only GET method is allowed for this endpoint",
+		})
+		return
+	}
 
-	// Root path
+	logPrintf("Request: %s %s from %s", r.Method, r.URL.Path, getClientIP(r))
+
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 
 	uptimeSeconds, uptimeHuman := getUptime()
-	location, _ := time.Now().Local().Zone()
+	location, _ := timeNow().Local().Zone()
 
 	info := ServiceInfo{
 		Service: Service{
@@ -124,7 +141,7 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 		Runtime: Runtime{
 			UptimeSeconds: uptimeSeconds,
 			UptimeHuman:   uptimeHuman,
-			CurrentTime:   time.Now().Format(time.RFC3339),
+			CurrentTime:   timeNow().Format(time.RFC3339),
 			Timezone:      location,
 		},
 		Request: Request{
@@ -145,20 +162,29 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(info); err != nil {
-		log.Printf("Error encoding JSON: %v", err)
+		logPrintf("Error encoding JSON: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
-// Health endpoint 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Health check from %s", getClientIP(r))
+	if r.Method != http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "Method Not Allowed",
+			"message": "Only GET method is allowed for this endpoint",
+		})
+		return
+	}
+
+	logPrintf("Health check from %s", getClientIP(r))
 
 	uptimeSeconds, _ := getUptime()
 
 	health := HealthResp{
 		Status:        "healthy",
-		Timestamp:     time.Now().UTC().Format(time.RFC3339),
+		Timestamp:     timeNow().UTC().Format(time.RFC3339),
 		UptimeSeconds: uptimeSeconds,
 	}
 
@@ -168,14 +194,13 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(health); err != nil {
-		log.Printf("Error encoding JSON: %v", err)
+		logPrintf("Error encoding JSON: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
-// Not Found handler
 func notFoundHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("404 Not Found: %s %s", r.Method, r.URL.Path)
+	logPrintf("404 Not Found: %s %s", r.Method, r.URL.Path)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotFound)
@@ -188,32 +213,33 @@ func notFoundHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func main() {
-	// Setup env
-	host := os.Getenv("HOST")
+// ==================== SERVER ====================
+func run() error {
+	host := osGetenv("HOST")
 	if host == "" {
 		host = "0.0.0.0"
 	}
 
-	port := os.Getenv("PORT")
+	port := osGetenv("PORT")
 	if port == "" {
 		port = "8000"
 	}
 
-	// Setup logging
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Printf("Starting DevOps Info Service (Go) on %s:%s", host, port)
+	logPrintf("Starting DevOps Info Service (Go) on %s:%s", host, port)
 
-	// Setup routes
 	http.HandleFunc("/", mainHandler)
 	http.HandleFunc("/health", healthHandler)
 
-	// Start server
 	addr := fmt.Sprintf("%s:%s", host, port)
-	log.Printf("Server is running on http://%s", addr)
-	log.Printf("Press Ctrl+C to stop")
+	logPrintf("Server is running on http://%s", addr)
+	logPrintf("Press Ctrl+C to stop")
 
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+	return httpListenAndServe(addr, nil)
+}
+
+func main() {
+	if err := run(); err != nil {
+		logFatalf("Server failed to start: %v", err)
 	}
 }
