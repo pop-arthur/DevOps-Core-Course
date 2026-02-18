@@ -1,0 +1,11 @@
+name: yandex-vm-infra
+description: Yandex Cloud VM infrastructure
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: python
