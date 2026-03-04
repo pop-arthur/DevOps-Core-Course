@@ -1,0 +1,1 @@
+[![Ansible Deployment](https://github.com/pop-arthur/DevOps-Core-Course/actions/workflows/ansible-deploy.yml/badge.svg)](https://github.com/pop-arthur/DevOps-Core-Course/actions/workflows/ansible-deploy.yml)
