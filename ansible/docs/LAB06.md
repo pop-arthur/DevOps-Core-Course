@@ -3,7 +3,8 @@
 
 ## Tasks evidence:
 
-### 1.5 Testing Blocks & Tags
+#
+## 1.5 Testing Blocks & Tags
 
 - Output showing selective execution with --tags
 
@@ -904,3 +905,284 @@ Clean reinstallation when you need to reset everything or change fundamental con
 #### 5. How would you extend this to wipe Docker images and volumes too?
 Add `docker system prune -af` to remove unused images and `docker volume prune -f` to clean volumes. Include these commands in the wipe block with the same double-gating safeguards.
 
+### 4.9 Testing CI/CD
+
+1. Screenshot of successful workflow run
+![img_1.png](screenshots/img_1.png)
+2. Output logs showing ansible-lint passing
+```
+cd ansible
+  ansible-lint playbooks/*.yml
+  shell: /usr/bin/bash -e {0}
+  env:
+    pythonLocation: /opt/hostedtoolcache/Python/3.12.12/x64
+    PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.12/x64/lib/pkgconfig
+    Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.12/x64
+    Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.12/x64
+    Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.12/x64
+    LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.12/x64/lib
+WARNING  Rule ComplexityRule has an invalid version_changed field '', is should be a 'X.Y.Z' format value.
+
+Passed: 0 failure(s), 0 warning(s) in 13 files processed of 13 encountered. Last profile that met the validation criteria was 'production'.```
+```
+
+3. Output logs showing ansible-playbook execution
+```
+  cd ansible
+  printf '%s' "$ANSIBLE_VAULT_PASSWORD" > /tmp/vault_pass
+  chmod 600 /tmp/vault_pass
+  ansible-playbook playbooks/deploy.yml \
+    -i inventory/hosts.local.ini \
+    --vault-password-file /tmp/vault_pass
+  rm -f /tmp/vault_pass
+  shell: /usr/bin/bash -e {0}
+  env:
+    pythonLocation: /home/ubuntu/actions-runner/_work/_tool/Python/3.12.13/x64
+    PKG_CONFIG_PATH: /home/ubuntu/actions-runner/_work/_tool/Python/3.12.13/x64/lib/pkgconfig
+    Python_ROOT_DIR: /home/ubuntu/actions-runner/_work/_tool/Python/3.12.13/x64
+    Python2_ROOT_DIR: /home/ubuntu/actions-runner/_work/_tool/Python/3.12.13/x64
+    Python3_ROOT_DIR: /home/ubuntu/actions-runner/_work/_tool/Python/3.12.13/x64
+    LD_LIBRARY_PATH: /home/ubuntu/actions-runner/_work/_tool/Python/3.12.13/x64/lib
+    ANSIBLE_VAULT_PASSWORD: ***
+
+PLAY [Deploy application] ******************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [localhost]
+
+TASK [docker : Install Docker dependencies] ************************************
+ok: [localhost]
+
+TASK [docker : Create Docker keyring directory] ********************************
+ok: [localhost]
+
+TASK [docker : Add Docker GPG key] *********************************************
+ok: [localhost]
+
+TASK [docker : Set Docker apt repo string] *************************************
+ok: [localhost]
+
+TASK [docker : Add Docker repository] ******************************************
+ok: [localhost]
+
+TASK [docker : Install Docker packages] ****************************************
+ok: [localhost]
+
+TASK [docker : Ensure Docker service is enabled and started] *******************
+ok: [localhost]
+
+TASK [docker : Add users to docker group] **************************************
+skipping: [localhost]
+
+TASK [docker : Add ansible_user to docker group] *******************************
+ok: [localhost]
+
+TASK [docker : Install python3-docker for Ansible docker modules] **************
+ok: [localhost]
+
+TASK [docker : Ensure Docker service is enabled (config block)] ****************
+ok: [localhost]
+
+TASK [web_app : Include wipe tasks] ********************************************
+included: /home/ubuntu/actions-runner/_work/DevOps-Core-Course/DevOps-Core-Course/ansible/roles/web_app/tasks/wipe.yml for localhost
+
+TASK [web_app : Stop and remove containers (Docker Compose down)] **************
+skipping: [localhost]
+
+TASK [web_app : Remove docker-compose file] ************************************
+skipping: [localhost]
+
+TASK [web_app : Remove application directory] **********************************
+skipping: [localhost]
+
+TASK [web_app : Log wipe completion] *******************************************
+skipping: [localhost]
+
+TASK [web_app : Create app directory] ******************************************
+changed: [localhost]
+
+TASK [web_app : Template docker-compose file] **********************************
+changed: [localhost]
+
+TASK [web_app : Deploy with Docker Compose (pull and up)] **********************
+ok: [localhost]
+
+TASK [web_app : Wait for application port] *************************************
+ok: [localhost]
+
+TASK [web_app : Verify health endpoint] ****************************************
+ok: [localhost]
+
+TASK [web_app : Report health check result] ************************************
+ok: [localhost] => {
+    "msg": "Health check OK: {'status': 'healthy', 'timestamp': '2026-03-04T10:13:52.865786+00:00', 'uptime_seconds': 1}"
+}
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=18   changed=2    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+```
+
+4. Verification step output showing app responding
+![img_2.png](screenshots/img_2.png)
+
+5. Status badge in README showing passing
+![img_3.png](screenshots/img_3.png)
+
+### 4.10 Research Questions
+1. What are the security implications of storing SSH keys in GitHub Secrets?
+
+Secrets are encrypted but still accessible to anyone with repository admin access and workflow maintainers. Compromised GitHub credentials could expose all secrets and grant access to your infrastructure.
+
+3. How would you implement a staging → production deployment pipeline? 
+
+Create separate inventory files for staging and production environments with different host groups. Use GitHub Actions workflows with manual approval gates between staging deployment success and production deployment.
+3. What would you add to make rollbacks possible?
+
+Tag each deployment with version numbers and keep previous Docker images in registry. Store previous docker-compose files and have a rollback playbook that redeploys last known good version.
+4. How does self-hosted runner improve security compared to GitHub-hosted?
+
+Keeps all secrets and code within your network without sending them to GitHub servers. Provides complete control over runner environment, security patches, and audit logging.
+
+# Documentation
+
+
+## Overview - What You Accomplished and Technologies Used
+Successfully transformed Lab 5's basic Ansible automation into a production-ready system with enterprise features. Technologies used: Ansible 2.16+ with blocks/tags, Docker Compose v2 with Jinja2 templating, GitHub Actions for CI/CD, and Vault for secrets management.
+
+## Blocks & Tags
+
+### Block Usage in Each Role
+
+**Common Role:**
+```yaml
+- name: System preparation block
+  block:
+    - name: Update apt cache
+    - name: Install common packages
+  rescue:
+    - name: Retry with clean cache
+  always:
+    - name: Verify installations
+```
+
+**Docker Role:**
+```yaml
+- name: Docker installation block
+  block:
+    - name: Add repository
+    - name: Install Docker
+  rescue:
+    - name: Cleanup failed installation
+    - name: Retry installation
+```
+
+**Deploy Role:**
+```yaml
+- name: Deployment block
+  block:
+    - name: Pull image
+    - name: Compose up
+  rescue:
+    - name: Rollback deployment
+  always:
+    - name: Health check
+```
+
+### Tag Strategy
+- `common` - System preparation tasks
+- `docker_install` - Docker installation only
+- `docker_config` - Docker configuration only  
+- `deploy` - Full application deployment
+- `wipe` - Safe cleanup (with double-gating)
+- `never` - Dangerous operations excluded from default runs
+
+## Docker Compose Migration
+
+### Template Structure
+```jinja2
+{% raw %}
+version: '3.8'
+services:
+  {{ app_name }}:
+    image: "{{ docker_image }}:{{ docker_tag }}"
+    ports:
+      - "{{ host_port }}:{{ container_port }}"
+    environment:
+      - SECRET_KEY={{ app_secret_key }}
+    restart: unless-stopped
+{% endraw %}
+```
+
+### Role Dependencies
+```
+provision.yml
+├── common (no dependencies)
+├── docker (depends: common)
+└── deploy (depends: docker)
+```
+
+### Before/After Comparison
+
+| Before (Lab 5) | After (Lab 6) |
+|----------------|---------------|
+| Static docker run commands | Dynamic docker-compose with Jinja2 |
+| No error handling | Blocks with rescue/always |
+| Manual deployment | CI/CD automated |
+| No rollback capability | Automatic rollback on failure |
+| Single app support | Multi-app ready |
+
+## Wipe Logic
+
+### Implementation Details
+```yaml
+- name: Safe wipe with double-gating
+  tags: [wipe, never]
+  block:
+    - name: Confirm wipe
+      pause:
+        prompt: "Type 'yes' to confirm data wipe"
+      when: wipe_confirmed is undefined
+    
+    - name: Remove containers and data
+      shell: docker compose down -v
+      args:
+        chdir: "{{ compose_project_dir }}"
+      when: 
+        - wipe_data | bool
+        - wipe_confirm.user_input == 'yes'
+```
+
+### Variable + Tag Approach
+- **Tag**: Explicitly include wipe tasks (`--tags wipe`)
+- **Variable**: Confirm intent (`-e "wipe_data=true"`)
+- **Confirmation**: Additional user prompt for safety
+
+## CI/CD Integration
+
+### Workflow Architecture
+```
+GitHub Push → Self-hosted Runner → Ansible → Target VM
+         → Lint Check → Vault Decrypt → Deploy → Health Check
+```
+
+### Setup Steps
+1. Configured self-hosted runner on Ubuntu instance
+2. Added secrets: `SSH_PRIVATE_KEY`, `ANSIBLE_VAULT_PASSWORD`
+3. Created workflow `.github/workflows/deploy.yml`
+4. Implemented manual approval for production
+
+
+## Challenges & Solutions
+
+### Challenge 1: Docker Repository Conflicts
+**Problem**: Existing Docker repository caused GPG key conflicts
+**Solution**: Added cleanup block before installation that removes old repository files
+
+### Challenge 2: Vault Password in CI/CD
+**Problem**: Secure handling of vault password in workflow
+**Solution**: Used GitHub Secrets with temporary file that's deleted after execution
+
+## Summary
+Overall reflection - good lab 
+Total time spent - 6 hours, maybe divide for 2 sep labs? Like self-hosted runner is a good lab)
+Key learnings - cool generation with Jinja
