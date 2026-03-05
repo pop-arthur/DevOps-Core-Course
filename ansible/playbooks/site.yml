@@ -1,0 +1,8 @@
+- name: Full site setup (provision + deploy)
+  hosts: webservers
+  become: true
+
+  roles:
+    - common
+    - docker
+    - web_app
