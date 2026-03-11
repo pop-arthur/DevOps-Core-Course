@@ -1,5 +1,4 @@
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from datetime import datetime
 import time
