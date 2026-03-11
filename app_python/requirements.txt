@@ -60,3 +60,4 @@ typing_extensions==4.15.0
 uvicorn==0.41.0
 wcmatch==10.1
 yamllint==1.38.0
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
