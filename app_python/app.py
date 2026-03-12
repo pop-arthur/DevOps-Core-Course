@@ -1,191 +1,219 @@
-import os
-import time
-import platform
-import logging
-import socket
-import uvicorn
-import sys
-from pythonjsonlogger import jsonlogger
+from fastapi import FastAPI, Request
 from datetime import datetime, timezone
-
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
-
-# Configure logging
-
-class DefaultFieldsFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        if not hasattr(record, "service"):
-            record.service = os.getenv("SERVICE_NAME", "devops-info-service")
-        if not hasattr(record, "version"):
-            record.version = os.getenv("SERVICE_VERSION", "1.0.0")
-        if not hasattr(record, "hostname"):
-            record.hostname = socket.gethostname()
-
-        for key in ("method", "path", "status_code", "client_ip", "duration_ms"):
-            if not hasattr(record, key):
-                setattr(record, key, None)
-
-        return True
+from fastapi.responses import JSONResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from prometheus_client import (
+    Counter,
+    Histogram,
+    Gauge,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+)
+import platform
+import socket
+import os
+import logging
+import sys
+import json
 
 
-def setup_json_logging() -> None:
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = jsonlogger.JsonFormatter(
-        "%(asctime)s %(levelname)s %(name)s %(message)s "
-        "%(service)s %(version)s %(hostname)s "
-        "%(method)s %(path)s %(status_code)s %(client_ip)s %(duration_ms)s"
-    )
-    handler.setFormatter(formatter)
-    handler.addFilter(DefaultFieldsFilter())
+class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        for key, value in record.__dict__.items():
+            if key not in (
+                "name",
+                "msg",
+                "args",
+                "levelname",
+                "levelno",
+                "pathname",
+                "filename",
+                "module",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "lineno",
+                "funcName",
+                "created",
+                "msecs",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "processName",
+                "process",
+                "message",
+                "taskName",
+            ):
+                log_entry[key] = value
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry)
 
-    root = logging.getLogger()
-    root.handlers = [handler]
-    root.setLevel(logging.INFO)
 
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-        log = logging.getLogger(name)
-        log.handlers = [handler]
-        log.propagate = False
-        log.setLevel(logging.INFO)
-
-setup_json_logging()
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(JSONFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[handler])
 logger = logging.getLogger(__name__)
 
-logger.info('Application starting...')
+app = FastAPI()
+START_TIME = datetime.now(timezone.utc)
 
-# Configuration from environment variables
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "5000"))
-DEBUG = os.getenv("DEBUG", "FALSE").lower() == "true"
-
-SERVICE_NAME = os.getenv("SERVICE_NAME", "devops-info-service")
-SERVICE_VERSION = os.getenv("SERVICE_VERSION", "1.0.0")
-SERVICE_DESCRIPTION = os.getenv("SERVICE_DESCRIPTION",
-                                "DevOps course info service")
-FRAMEWORK = "FastAPI"
-
-START_TIME = time.time()
-
-app = FastAPI(
-    title=SERVICE_NAME,
-    version=SERVICE_VERSION,
-    description=SERVICE_DESCRIPTION,
+# Prometheus Metrics
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status_code"],
 )
+
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["method", "endpoint"],
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5],
+)
+
+http_requests_in_progress = Gauge(
+    "http_requests_in_progress", "HTTP requests currently being processed"
+)
+
+devops_info_endpoint_calls = Counter(
+    "devops_info_endpoint_calls_total", "Calls per endpoint", ["endpoint"]
+)
+
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", 8000))
+
+logger.info(f"Application starting - Host: {HOST}, Port: {PORT}")
+
+
+def get_uptime():
+    delta = datetime.now(timezone.utc) - START_TIME
+    secs = int(delta.total_seconds())
+    hrs = secs // 3600
+    mins = (secs % 3600) // 60
+    return {"seconds": secs, "human": f"{hrs} hours, {mins} minutes"}
+
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("FastAPI application startup complete")
+    logger.info(f"Python version: {platform.python_version()}")
+    logger.info(f"Platform: {platform.system()} {platform.platform()}")
+    logger.info(f"Hostname: {socket.gethostname()}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    uptime = get_uptime()
+    logger.info(f"Application shutting down. Total uptime: {uptime['human']}")
 
 
 @app.middleware("http")
-async def access_log_middleware(request: Request, call_next):
-    start = time.perf_counter()
+async def log_requests(request: Request, call_next):
+    start_time = datetime.now(timezone.utc)
     client_ip = request.client.host if request.client else "unknown"
+
+    # Normalize endpoint (avoid high cardinality)
+    endpoint = request.url.path
+
+    http_requests_in_progress.inc()
+    logger.info(
+        f"Request started: {request.method} {endpoint} from {client_ip}"
+    )
 
     try:
         response = await call_next(request)
-        status_code = response.status_code
-        return response
-    except Exception:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        logger.exception(
-            "unhandled_exception",
+        process_time = (
+            datetime.now(timezone.utc) - start_time
+        ).total_seconds()
+
+        # Record metrics
+        http_requests_total.labels(
+            method=request.method,
+            endpoint=endpoint,
+            status_code=str(response.status_code),
+        ).inc()
+
+        http_request_duration_seconds.labels(
+            method=request.method, endpoint=endpoint
+        ).observe(process_time)
+
+        devops_info_endpoint_calls.labels(endpoint=endpoint).inc()
+
+        logger.info(
+            "Request completed",
             extra={
-                "service": SERVICE_NAME,
-                "version": SERVICE_VERSION,
-                "hostname": socket.gethostname(),
                 "method": request.method,
-                "path": request.url.path,
-                "status_code": 500,
+                "path": endpoint,
+                "status_code": response.status_code,
                 "client_ip": client_ip,
-                "duration_ms": duration_ms,
+                "duration_seconds": round(process_time, 3),
+            },
+        )
+
+        response.headers["X-Process-Time"] = str(process_time)
+        return response
+
+    except Exception as e:
+        process_time = (
+            datetime.now(timezone.utc) - start_time
+        ).total_seconds()
+        http_requests_total.labels(
+            method=request.method, endpoint=endpoint, status_code="500"
+        ).inc()
+        logger.error(
+            "Request failed",
+            extra={
+                "method": request.method,
+                "path": endpoint,
+                "client_ip": client_ip,
+                "duration_seconds": round(process_time, 3),
+                "error": str(e),
             },
         )
         raise
     finally:
-        if "status_code" in locals():
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            logger.info(
-                "http_request",
-                extra={
-                    "service": SERVICE_NAME,
-                    "version": SERVICE_VERSION,
-                    "hostname": socket.gethostname(),
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status_code": status_code,
-                    "client_ip": client_ip,
-                    "duration_ms": duration_ms,
-                },
-            )
+        http_requests_in_progress.dec()
 
 
-def get_uptime_seconds():
-    """
-    Calculate the uptime of the application.
-    Returns a dictionary with total seconds and human-readable format.
-    """
-    delta = time.time() - START_TIME
-    seconds = int(delta)
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    return {
-        'seconds': seconds,
-        'human': f"{hours} hours, {minutes} minutes"
-    }
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-def iso_utc_now() -> str:
-    """
-    Get current time in ISO 8601 UTC format.
-    """
-    dt = datetime.now(timezone.utc)
-    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
-
-def system_info() -> dict:
-    """
-    Get system information such as platform, version, CPU count.
-    """
-    return {
-        "hostname": socket.gethostname(),
-        "platform": platform.system(),
-        "platform_version": platform.version(),
-        "architecture": platform.machine(),
-        "cpu_count": os.cpu_count() or 0,
-        "python_version": platform.python_version(),
-    }
-
-
-def client_ip_from_request(request: Request) -> str:
-    """
-    Extract client IP address from request.
-    """
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
-
-
-@app.get("/", response_class=JSONResponse)
-async def root(request: Request):
-    """
-    Main endpoint that returns service, system, and runtime information.
-    """
-    up = get_uptime_seconds()
-
+@app.get("/")
+def root(request: Request):
+    logger.debug("Home endpoint called")
+    uptime = get_uptime()
     return {
         "service": {
-            "name": SERVICE_NAME,
-            "version": SERVICE_VERSION,
-            "description": SERVICE_DESCRIPTION,
-            "framework": FRAMEWORK,
+            "name": "devops-info-service",
+            "version": "1.0.0",
+            "description": "DevOps course info service",
+            "framework": "FastAPI",
         },
-        "system": system_info(),
+        "system": {
+            "hostname": socket.gethostname(),
+            "platform": platform.system(),
+            "platform_version": platform.platform(),
+            "architecture": platform.machine(),
+            "cpu_count": os.cpu_count(),
+            "python_version": platform.python_version(),
+        },
         "runtime": {
-            "uptime_seconds": up['seconds'],
-            "uptime_human": up['human'],
-            "current_time": iso_utc_now(),
+            "uptime_seconds": uptime["seconds"],
+            "uptime_human": uptime["human"],
+            "current_time": datetime.now(timezone.utc).isoformat(),
             "timezone": "UTC",
         },
         "request": {
-            "client_ip": client_ip_from_request(request),
+            "client_ip": request.client.host if request.client else "unknown",
             "user_agent": request.headers.get("user-agent", "unknown"),
             "method": request.method,
             "path": request.url.path,
@@ -194,61 +222,76 @@ async def root(request: Request):
             {
                 "path": "/",
                 "method": "GET",
-                "description": "Service information"
-                },
+                "description": "Service information",
+            },
             {
                 "path": "/health",
                 "method": "GET",
-                "description": "Health check"
-                },
+                "description": "Health check",
+            },
         ],
     }
 
 
-@app.get("/health", response_class=JSONResponse)
-async def health(request: Request):
-    """
-    Health check endpoint for monitoring.
-    """
-    up = get_uptime_seconds()
-
+@app.get("/health")
+def health():
+    logger.debug("Health check endpoint called")
+    uptime = get_uptime()
     return {
         "status": "healthy",
-        "timestamp": iso_utc_now(),
-        "uptime_seconds": up['seconds'],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "uptime_seconds": uptime["seconds"],
     }
 
 
-@app.exception_handler(500)
-async def internal_server_error(request: Request, exc: HTTPException):
-    logger.error(f"500 Error: {str(exc)} for {request.url.path}")
-    return JSONResponse(
-        status_code=500,
-        content={"message": "Internal server error", "error": str(exc)},
-    )
-
-
-@app.exception_handler(404)
-async def not_found_exception(request: Request, exc: HTTPException):
-    logger.error(
-        "not_found",
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+):
+    client = request.client.host if request.client else "unknown"
+    logger.warning(
+        "HTTP exception",
         extra={
-            "timestamp": iso_utc_now(),
-            "level": "WARNING",
-            "service": SERVICE_NAME,
-            "version": SERVICE_VERSION,
-            "hostname": socket.gethostname(),
-            "method": request.method,
+            "status_code": exc.status_code,
+            "detail": exc.detail,
             "path": request.url.path,
-            "status_code": 404,
-            "client_ip": request.client.host if request.client else "unknown",
+            "client_ip": client,
         },
     )
     return JSONResponse(
-        status_code=404,
-        content={"message": "Endpoint not found", "ERROR": str(exc)},
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail,
+            "status_code": exc.status_code,
+            "path": request.url.path,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    client = request.client.host if request.client else "unknown"
+    logger.error(
+        "Unhandled exception",
+        extra={
+            "exception_type": type(exc).__name__,
+            "path": request.url.path,
+            "client_ip": client,
+        },
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred",
+            "path": request.url.path,
+        },
     )
 
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host=HOST, port=PORT, reload=DEBUG)
+    import uvicorn
+
+    logger.info(f"Starting Uvicorn server on {HOST}:{PORT}")
+    uvicorn.run(app, host=HOST, port=PORT)

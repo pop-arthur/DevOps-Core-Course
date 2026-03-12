@@ -20,6 +20,8 @@ WORKDIR /app
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
 
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /opt/venv /opt/venv
 
 COPY --chown=appuser:appuser app.py .
@@ -27,9 +29,9 @@ COPY --chown=appuser:appuser requirements.txt .
 
 USER appuser
 
-EXPOSE 5000
+EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import socket; socket.create_connection(('localhost', 5000), timeout=2)"
+    CMD python -c "import socket; socket.create_connection(('localhost', 8000), timeout=2)"
 
 CMD ["python", "app.py"]
