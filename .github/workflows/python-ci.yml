@@ -10,6 +10,7 @@ on:
       - '.github/workflows/python-ci.yml'
   pull_request:
     branches: [ main ]
+    tags: [ 'v*.*.*' ]
     paths:
       - "app_python/**"
       - '.github/workflows/python-ci.yml'
