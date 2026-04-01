@@ -1,8 +1,8 @@
 replicaCount: 2
 
 image:
-  repository: poparthur/devops-info-service:latest
-  tag: "1.0"
+  repository: poparthur/devops-info-service
+  tag: "latest"
   pullPolicy: IfNotPresent
 
 service:
@@ -27,7 +27,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /ready
+    path: /health
     port: 8000
   initialDelaySeconds: 5
   periodSeconds: 3
@@ -35,3 +35,7 @@ readinessProbe:
 serviceAccount:
   create: true
   name: ""
+
+secrets:
+  username: admin
+  password: supersecret

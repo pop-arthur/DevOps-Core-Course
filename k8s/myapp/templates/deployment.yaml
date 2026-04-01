@@ -11,21 +11,37 @@ spec:
       {{- include "myapp.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "myapp-role"
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/myapp/config"
+
       labels:
         {{- include "myapp.selectorLabels" . | nindent 8 }}
     spec:
       containers:
       - name: {{ .Chart.Name }}
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: {{ .Values.service.targetPort }}
 
         resources:
-          {{- toYaml .Values.resources | nindent 10 }}
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
 
         livenessProbe:
           {{- toYaml .Values.livenessProbe | nindent 10 }}
 
         readinessProbe:
           {{- toYaml .Values.readinessProbe | nindent 10 }}
+
+        envFrom:
+          - secretRef:
+              name: {{ .Release.Name }}-secret
+
+
