@@ -16,6 +16,23 @@ import logging
 import sys
 import json
 
+DATA_DIR = "/app/data"
+DATA_FILE = f"{DATA_DIR}/visits"
+
+os.makedirs(DATA_DIR, exist_ok=True)
+
+def read_visits():
+    try:
+        with open(DATA_FILE, "r") as f:
+            return int(f.read())
+    except:
+        return 0
+
+
+def write_visits(count: int):
+    with open(DATA_FILE, "w") as f:
+        f.write(str(count))
+
 
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -189,6 +206,9 @@ def metrics():
 
 @app.get("/")
 def root(request: Request):
+    visits = read_visits() + 1
+    write_visits(visits)
+
     logger.debug("Home endpoint called")
     uptime = get_uptime()
     return {
@@ -243,6 +263,9 @@ def health():
         "uptime_seconds": uptime["seconds"],
     }
 
+@app.get("/visits")
+def get_visits():
+    return {"visits": read_visits()}
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(
