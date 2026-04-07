@@ -15,9 +15,15 @@ resources:
     memory: 256Mi
 
 livenessProbe:
-  initialDelaySeconds: 30
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
   periodSeconds: 5
 
 readinessProbe:
-  initialDelaySeconds: 10
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 5
   periodSeconds: 3
