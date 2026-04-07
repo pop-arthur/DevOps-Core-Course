@@ -195,15 +195,72 @@ automated:
    myapp-dev-myapp-5fbdd6984f-wqtpd   0/1     Running   0          11s
    arthur@192 ~ %
    ```
+   - self-healing
+   ```
+   arthur@192 ~ % kubectl scale deployment myapp-dev-myapp -n dev --replicas=5
+   deployment.apps/myapp-dev-myapp scaled
+   arthur@192 ~ % kubectl get pods -n dev                                     
+   NAME                               READY   STATUS        RESTARTS   AGE
+   myapp-dev-myapp-5fbdd6984f-c6vpb   1/1     Running       0          9m56s
+   myapp-dev-myapp-5fbdd6984f-jslfq   1/1     Running       0          12m
+   myapp-dev-myapp-5fbdd6984f-kpx4g   0/1     Terminating   0          11s
+   myapp-dev-myapp-5fbdd6984f-qpvtk   0/1     Terminating   0          11s
+   myapp-dev-myapp-5fbdd6984f-v7k68   0/1     Terminating   0          11s
+   ```
    - Pod deletion test
    ```
-   
+   arthur@192 ~ % kubectl delete pod -n dev -l app.kubernetes.io/instance=myapp-dev
+   pod "myapp-dev-myapp-5fbdd6984f-c6vpb" deleted from dev namespace
+   pod "myapp-dev-myapp-5fbdd6984f-jslfq" deleted from dev namespace
+   kubectl get pods -n dev -w
+   arthur@192 ~ % kubectl get pods -n dev -w
+   NAME                               READY   STATUS              RESTARTS   AGE
+   myapp-dev-myapp-5fbdd6984f-7dv9x   0/1     ContainerCreating   0          5s
+   myapp-dev-myapp-5fbdd6984f-khj4q   0/1     ContainerCreating   0          5s
+   myapp-dev-myapp-5fbdd6984f-7dv9x   0/1     Running             0          6s
+   myapp-dev-myapp-5fbdd6984f-khj4q   0/1     Running             0          7s
+   myapp-dev-myapp-5fbdd6984f-7dv9x   1/1     Running             0          11s
+   myapp-dev-myapp-5fbdd6984f-khj4q   1/1     Running             0          14s
    ```
    - Configuration drift test
    ```
-   
+   arthur@192 DevOps-Core-Course % kubectl label deployment myapp-dev-myapp -n dev test=drift
+   deployment.apps/myapp-dev-myapp labeled
+   arthur@192 DevOps-Core-Course % kubectl get deployment myapp-dev-myapp -n dev -o yaml | grep test
+         {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"argocd.argoproj.io/tracking-id":"myapp-dev:apps/Deployment:dev/myapp-dev-myapp"},"labels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"},"name":"myapp-dev-myapp","namespace":"dev"},"spec":{"replicas":2,"selector":{"matchLabels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"}},"template":{"metadata":{"labels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"}},"spec":{"containers":[{"envFrom":[{"secretRef":{"name":"myapp-dev-secret"}},{"configMapRef":{"name":"myapp-dev-myapp-env"}}],"image":"poparthur/devops-info-service:latest","imagePullPolicy":"Always","livenessProbe":{"httpGet":{"path":"/health","port":8000},"initialDelaySeconds":10,"periodSeconds":5},"name":"myapp","ports":[{"containerPort":8000}],"readinessProbe":{"httpGet":{"path":"/health","port":8000},"initialDelaySeconds":5,"periodSeconds":3},"resources":{"limits":{"cpu":"200m","memory":"128Mi"},"requests":{"cpu":"100m","memory":"64Mi"}},"volumeMounts":[{"mountPath":"/config","name":"config-volume"},{"mountPath":"/app/data","name":"data-volume"}]}],"volumes":[{"configMap":{"name":"myapp-dev-myapp-config"},"name":"config-volume"},{"name":"data-volume","persistentVolumeClaim":{"claimName":"myapp-dev-myapp-data"}}]}}}}
+       test: drift
+           image: poparthur/devops-info-service:latest
+   deployment.apps/myapp-dev-myapp labeled
+   arthur@192 DevOps-Core-Course % kubectl get deployment myapp-dev-myapp -n dev -o yaml | grep test
+         {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"argocd.argoproj.io/tracking-id":"myapp-dev:apps/Deployment:dev/myapp-dev-myapp"},"labels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"},"name":"myapp-dev-myapp","namespace":"dev"},"spec":{"replicas":2,"selector":{"matchLabels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"}},"template":{"metadata":{"labels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"}},"spec":{"containers":[{"envFrom":[{"secretRef":{"name":"myapp-dev-secret"}},{"configMapRef":{"name":"myapp-dev-myapp-env"}}],"image":"poparthur/devops-info-service:latest","imagePullPolicy":"Always","livenessProbe":{"httpGet":{"path":"/health","port":8000},"initialDelaySeconds":10,"periodSeconds":5},"name":"myapp","ports":[{"containerPort":8000}],"readinessProbe":{"httpGet":{"path":"/health","port":8000},"initialDelaySeconds":5,"periodSeconds":3},"resources":{"limits":{"cpu":"200m","memory":"128Mi"},"requests":{"cpu":"100m","memory":"64Mi"}},"volumeMounts":[{"mountPath":"/config","name":"config-volume"},{"mountPath":"/app/data","name":"data-volume"}]}],"volumes":[{"configMap":{"name":"myapp-dev-myapp-config"},"name":"config-volume"},{"name":"data-volume","persistentVolumeClaim":{"claimName":"myapp-dev-myapp-data"}}]}}}}
+           image: poparthur/devops-info-service:latest
    ```
    - Explanation of behaviors
+
+   ### Explanation of Behaviors
+
+During the experiments, both Kubernetes and ArgoCD self-healing mechanisms were observed and analyzed.
+
+**1. Manual Scale Test (ArgoCD Self-Healing):**  
+The Deployment in the dev environment was manually scaled from the desired number of replicas to a higher value (e.g., 5). This created a configuration drift between the cluster state and the Git-defined state.  
+ArgoCD detected this drift and, with `selfHeal` enabled, automatically reverted the number of replicas back to the value defined in the Helm values file. Extra pods were terminated.  
+
+**2. Pod Deletion Test (Kubernetes Self-Healing):**  
+Pods were manually deleted from the dev namespace. Kubernetes, through the Deployment/ReplicaSet controller, automatically recreated the missing pods to maintain the desired replica count.  
+This behavior is independent of ArgoCD and demonstrates Kubernetes’ built-in self-healing capabilities.  
+
+**3. Configuration Drift Test (ArgoCD Self-Healing):**  
+A manual change was introduced by modifying the Deployment configuration (adding a custom label). This created a mismatch between the live cluster state and the Git repository.  
+ArgoCD detected the drift and restored the original configuration by removing the unauthorized change, ensuring consistency with Git.  
+
+**4. Key Differences:**  
+- Kubernetes self-healing operates at the infrastructure level (pods and replicas).  
+- ArgoCD self-healing operates at the configuration level (ensuring cluster state matches Git).  
+
+**5. Sync Behavior:**  
+ArgoCD continuously monitors the cluster and compares it with the Git repository. It can automatically apply changes (auto-sync) or require manual approval, depending on the environment configuration.  
+By default, ArgoCD checks for changes periodically, but synchronization can also be triggered manually or via webhooks.
+
 
 5. **Screenshots**
    - ArgoCD UI showing both applications
