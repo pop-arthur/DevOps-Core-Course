@@ -117,18 +117,94 @@ GROUP  KIND                   NAMESPACE  NAME                    STATUS     HEAL
 batch  Job            
 ```
 
+After commit and push
+![img_7.png](../docs/screenshots/lab13/img_7.png)
+
+After `argocd app sync myapp-dev`
+
+![img_8.png](../docs/screenshots/lab13/img_8.png)
+
 3. **Multi-Environment**
-   - Dev vs Prod configuration differences
-   - Sync policy differences and rationale
-   - Namespace separation
+   - **Dev vs Prod configuration differences**
+     - Dev application configuration
+     ![img_9.png](../docs/screenshots/lab13/img_9.png)
+     ![img_10.png](../docs/screenshots/lab13/img_10.png)
+
+     - Prod application
+     ![img_11.png](../docs/screenshots/lab13/img_11.png)
+     ![img_12.png](../docs/screenshots/lab13/img_12.png)
+
+
+The application is deployed to two environments using different Helm values files:
+
+Development (dev):
+- Uses values-dev.yaml 
+- Lower replica count (e.g., 1–2 replicas)
+- Designed for fast iteration and testing
+
+
+Production (prod):
+- Uses values-prod.yaml
+- Higher replica count (initially 4, later adjusted)
+- Includes stricter resource limits (CPU/memory)
+- Configured for stability and reliability
+
+- **Sync policy differences and rationale**
+**- Development Environment:**
+
+- Auto-sync enabled:
+```
+automated:
+  prune: true
+  selfHeal: true
+```
+- Automatically applies changes from Git
+- selfHeal restores state if manual changes occur
+- prune removes deleted resources
+
+**- Production Environment:**
+- Manual sync only (no automated block)
+- Changes must be explicitly approved and applied
+- Ensures controlled releases
+
+
+- **Namespace separation**
+  - dev namespace
+    - Hosts development environment
+    - Isolated from production workloads
+  - prod namespace
+    - Hosts production environment
+    - Ensures stability and security
 
 4. **Self-Healing Evidence**
    - Manual scale test with before/after
+   ```
+   arthur@192 ~ % kubectl get pods -n dev
+   NAME                               READY   STATUS    RESTARTS   AGE
+   myapp-dev-myapp-5fbdd6984f-785nx   1/1     Running   0          2m20s
+   myapp-dev-myapp-5fbdd6984f-jslfq   1/1     Running   0          2m11s
+   myapp-dev-myapp-5fbdd6984f-wqtpd
+   arthur@192 ~ % kubectl scale deployment myapp-dev-myapp -n dev --replicas=5
+   deployment.apps/myapp-dev-myapp scaled
+   arthur@192 ~ % kubectl get pods -n dev
+   NAME                               READY   STATUS    RESTARTS   AGE
+   myapp-dev-myapp-5fbdd6984f-785nx   1/1     Running   0          2m30s
+   myapp-dev-myapp-5fbdd6984f-c6vpb   0/1     Running   0          11s
+   myapp-dev-myapp-5fbdd6984f-jbnpr   0/1     Running   0          11s
+   myapp-dev-myapp-5fbdd6984f-jslfq   1/1     Running   0          2m21s
+   myapp-dev-myapp-5fbdd6984f-wqtpd   0/1     Running   0          11s
+   arthur@192 ~ %
+   ```
    - Pod deletion test
+   ```
+   
+   ```
    - Configuration drift test
+   ```
+   
+   ```
    - Explanation of behaviors
 
 5. **Screenshots**
    - ArgoCD UI showing both applications
-   - Sync status
-   - Application details view
+   ![img_13.png](../docs/screenshots/lab13/img_13.png)
