@@ -60,14 +60,7 @@ spec:
           - configMapRef:
               name: {{ include "myapp.fullname" . }}-env
   strategy:
-    canary:
-      steps:
-          - setWeight: 20
-          - pause: { }
-          - setWeight: 40
-          - pause: { duration: 30s }
-          - setWeight: 60
-          - pause: { duration: 30s }
-          - setWeight: 80
-          - pause: { duration: 30s }
-          - setWeight: 100
+    blueGreen:
+      activeService: {{ include "myapp.fullname" . }}
+      previewService: {{ include "myapp.fullname" . }}-preview
+      autoPromotionEnabled: false
