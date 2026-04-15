@@ -3,7 +3,7 @@ replicaCount: 2
 image:
   repository: poparthur/devops-info-service
   tag: "latest"
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
 service:
   type: NodePort
@@ -35,6 +35,18 @@ readinessProbe:
 serviceAccount:
   create: true
   name: ""
+
+persistence:
+  size: 1Gi
+
+pvc:
+  enabled: false
+
+deployment:
+  enabled: false
+
+rollout:
+  enabled: false
 
 secrets:
   username: admin

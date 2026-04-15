@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Rollout
+metadata:
+  annotations:
+    argocd.argoproj.io/tracking-id: myapp-dev:apps/Deployment:dev/myapp-dev-myapp
+    deployment.kubernetes.io/revision: "2"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"argocd.argoproj.io/tracking-id":"myapp-dev:apps/Deployment:dev/myapp-dev-myapp"},"labels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"},"name":"myapp-dev-myapp","namespace":"dev"},"spec":{"replicas":2,"selector":{"matchLabels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"}},"template":{"metadata":{"labels":{"app.kubernetes.io/instance":"myapp-dev","app.kubernetes.io/name":"myapp"}},"spec":{"containers":[{"envFrom":[{"secretRef":{"name":"myapp-dev-secret"}},{"configMapRef":{"name":"myapp-dev-myapp-env"}}],"image":"poparthur/devops-info-service:latest","imagePullPolicy":"Always","livenessProbe":{"httpGet":{"path":"/health","port":8000},"initialDelaySeconds":10,"periodSeconds":5},"name":"myapp","ports":[{"containerPort":8000}],"readinessProbe":{"httpGet":{"path":"/health","port":8000},"initialDelaySeconds":5,"periodSeconds":3},"resources":{"limits":{"cpu":"200m","memory":"128Mi"},"requests":{"cpu":"100m","memory":"64Mi"}},"volumeMounts":[{"mountPath":"/config","name":"config-volume"},{"mountPath":"/app/data","name":"data-volume"}]}],"volumes":[{"configMap":{"name":"myapp-dev-myapp-config"},"name":"config-volume"},{"name":"data-volume","persistentVolumeClaim":{"claimName":"myapp-dev-myapp-data"}}]}}}}
+  creationTimestamp: "2026-04-07T17:28:58Z"
+  generation: 14
+  labels:
+    app.kubernetes.io/instance: myapp-dev
+    app.kubernetes.io/name: myapp
+    test: drift
+  name: myapp-dev-myapp
+  namespace: dev
+  resourceVersion: "11701"
+  uid: b92139e5-5aa0-43a6-b369-b6282c1a0f43
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: myapp-dev
+      app.kubernetes.io/name: myapp
+  strategy:
+    canary:
+      steps:
+        - setWeight: 50
+        - pause: { duration: 10s }
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: myapp-dev
+        app.kubernetes.io/name: myapp
+    spec:
+      containers:
+      - envFrom:
+        - secretRef:
+            name: myapp-dev-secret
+        - configMapRef:
+            name: myapp-dev-myapp-env
+        image: poparthur/devops-info-service:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: myapp
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /config
+          name: config-volume
+        - mountPath: /app/data
+          name: data-volume
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: myapp-dev-myapp-config
+        name: config-volume
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: myapp-dev-myapp-data
+status:
+  availableReplicas: 2
+  conditions:
+  - lastTransitionTime: "2026-04-07T17:28:58Z"
+    lastUpdateTime: "2026-04-07T17:33:29Z"
+    message: ReplicaSet "myapp-dev-myapp-5fbdd6984f" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  - lastTransitionTime: "2026-04-09T13:11:08Z"
+    lastUpdateTime: "2026-04-09T13:11:08Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  observedGeneration: 14
+  readyReplicas: 2
+  replicas: 2
+  terminatingReplicas: 0
+  updatedReplicas: 2
